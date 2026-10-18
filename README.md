@@ -1,10 +1,17 @@
 # Indicadores Financieros desde Cero
 
-Construcción de un pipeline completo de indicadores financieros a partir de tres estados contables crudos (balance, cuenta de resultados y flujo de caja), con SQL avanzado y percentiles calculados manualmente en MySQL.
+Construcción de un pipeline completo de indicadores financieros a partir de tres estados contables crudos (balance, cuenta de resultados y flujo de caja), con SQL avanzado, percentiles calculados manualmente en MySQL y un pipeline equivalente en Python que termina en una ficha financiera en Excel.
 
 ## Contexto de negocio
 
 Comparar la salud financiera de distintas empresas requiere algo más que mirar cifras sueltas: hace falta construir ratios estandarizados (liquidez, rentabilidad, solvencia, calidad del beneficio) a partir de datos contables brutos, y hacerlo de forma que el pipeline sea repetible año tras año y empresa tras empresa, no un cálculo manual puntual.
+
+## Resultados
+
+- **Datos**: 4.422 empresas cotizadas y 17.511 cierres anuales con los 3 estados contables disponibles ([Financial Data of 4400+ Public Companies](https://www.kaggle.com/datasets/qks1lver/financial-data-of-4400-public-companies), Kaggle).
+- **Patrimonio neto negativo**: el 8,1 % de los cierres; en ellos el ROE no es interpretable y se marca con un flag.
+- **Valores extremos**: la media de ratios como el ROE no sirve sin tratarlos (el ROE medio de 2018 sale un 46.810 %); la mediana o la versión winsorizada sí.
+- **Calidad del dato**: 101 cierres duplicados en 27 tickers (por ejemplo GOOG y GOOGL, la misma empresa) y celdas vacías que, al importarse a MySQL, se convertían en ceros.
 
 ## Qué hace este proyecto
 
@@ -14,25 +21,53 @@ Comparar la salud financiera de distintas empresas requiere algo más que mirar 
   - **Rentabilidad**: ROE, ROA, margen neto, margen operativo (con flag de patrimonio negativo, que invalida la lectura del ROE)
   - **Solvencia**: deuda sobre patrimonio, ratio de endeudamiento, cobertura de intereses
   - **Calidad del beneficio**: flujo de caja sobre beneficio neto, flujo de caja libre
-- **Tratamiento de valores extremos sin alterar los datos**: en vez de recortar o eliminar los valores atípicos, se calcula el percentil 1% y 99% de cada ratio **a mano** (MySQL no tiene función `PERCENTILE_CONT` nativa, así que se resuelve con `ROW_NUMBER()` sobre los valores ordenados) y se marca cada fila con un flag booleano si cae fuera de ese rango — dejando la decisión de excluirlos o no en manos de quien analice los datos después.
-- **Análisis exploratorio en SQL**: volumetría por tabla, empresas con histórico incompleto, crecimiento interanual de ingresos con `LAG() OVER (PARTITION BY ...)`, evolución de la rentabilidad media por año y prevalencia de patrimonio neto negativo.
+- **Tratamiento de valores extremos sin alterar los datos**: en vez de recortar o eliminar los valores atípicos, se calcula el percentil 1 % y 99 % de cada ratio **a mano** (MySQL no tiene función `PERCENTILE_CONT` nativa, así que se resuelve con `ROW_NUMBER()` sobre los valores ordenados) y se marca cada fila con un flag booleano si cae fuera de ese rango, dejando la decisión de excluirlos o no en manos de quien analice los datos después.
+- **Análisis exploratorio en SQL**: volumetría por tabla, empresas con histórico incompleto, crecimiento interanual de ingresos con `LAG() OVER (PARTITION BY ...)`, evolución de la rentabilidad por año y prevalencia de patrimonio neto negativo.
+- **Pipeline en Python**: los mismos indicadores con pandas, una versión winsorizada para agregados, la ficha financiera por empresa y su exportación a Excel con gráficos nativos.
 
 ## Un detalle técnico destacado
 
-MySQL no incluye una función de percentil nativa (a diferencia de PostgreSQL o motores analíticos), así que el cálculo se construye combinando `ROW_NUMBER()` sobre los valores ordenados de cada ratio con el conteo total de filas, para localizar manualmente la posición exacta del percentil 1% y 99% — la misma lógica que en Python resolvería `.quantile()` en una sola línea, aquí implementada explícitamente en SQL puro.
+MySQL no incluye una función de percentil nativa (a diferencia de PostgreSQL o motores analíticos), así que el cálculo se construye combinando `ROW_NUMBER()` sobre los valores ordenados de cada ratio con el conteo total de filas, para localizar manualmente la posición exacta del percentil 1 % y 99 %: la misma lógica que en Python resolvería `.quantile()` en una sola línea, aquí implementada explícitamente en SQL puro.
+
+## Revisión y correcciones (octubre 2026)
+
+La parte de Python se revisó a fondo y se reunió en un único notebook (antes eran 9 archivos, y el notebook del repositorio importaba un módulo que no estaba subido, así que no se podía ejecutar). Las correcciones más importantes:
+
+- **Cierres duplicados**: 101 cierres repetidos en 27 tickers (GOOG y GOOGL salían dos veces en los rankings); se detectan con un auto-join y se excluyen con `NOT EXISTS`.
+- **Vacíos frente a ceros**: al importar los CSV a MySQL, las celdas vacías se convertían en 0 e inflaban 2.245 flujos de caja libre.
+- **Infinitos y percentiles**: los extremos se marcaban antes de quitar las divisiones por cero; ahora una división segura deja vacío lo no calculable.
+- **Medias engañosas**: el ROE medio de 2018 (46.810 %) y un margen neto medio de −190 % en el gráfico de evolución; ahora se usa la mediana.
+- **Seguridad y portabilidad**: la contraseña de MySQL ya no está en el código y las rutas son relativas.
+
+Los scripts `.sql` se mantienen en su versión original: las dos primeras limitaciones (duplicados y vacíos importados como 0) también les afectan, y el notebook explica cómo detectarlas.
 
 ## Herramientas
 
-- **MySQL** (MySQL Workbench) — modelado, vistas, window functions
-- **Jupyter Notebook** — exploración y documentación del proceso
+- **MySQL** (MySQL Workbench): modelado, vistas, window functions
+- **Python** (pandas, SQLAlchemy, matplotlib, openpyxl): pipeline de indicadores, exploración y exportación a Excel
+
+## Estructura del repositorio
+
+- `schema_mysql.sql`: creación de la base de datos y las tablas
+- `queries_analisis.sql`: vista `v_indicadores_financieros` y exploración en SQL
+- `flags_valores_extremos.sql`: percentiles manuales y flags de valores extremos
+- `indicadores_financieros_python_explicado.ipynb`: el pipeline completo en Python, explicado paso a paso
+- `indicadores_financieros_python_explicado.pdf`: el mismo notebook en PDF
 
 ## Cómo ejecutarlo
 
-1. Crea la base de datos ejecutando `schema_mysql.sql` en MySQL Workbench.
-2. Carga los tres CSV de estados financieros en sus tablas correspondientes (instrucciones detalladas dentro del propio script).
+**SQL (MySQL Workbench)**
+
+1. Crea la base de datos ejecutando `schema_mysql.sql`.
+2. Carga los tres CSV de estados financieros en sus tablas correspondientes (instrucciones dentro del propio script).
 3. Ejecuta `queries_analisis.sql` para crear la vista `v_indicadores_financieros` y explorar los datos.
-4. Ejecuta `flags_valores_extremos.sql` para añadir los flags de valores extremos sobre la vista anterior.
-5. Abre `proyecto_indicadores_financieros_mysql.ipynb` para ver el proceso completo documentado paso a paso.
+4. Ejecuta `flags_valores_extremos.sql` para añadir los flags de valores extremos.
+
+**Python**
+
+1. Descarga los 3 CSV anuales del dataset de Kaggle (`balanceSheetHistory_annually.csv`, `incomeStatementHistory_annually.csv`, `cashflowStatement_annually.csv`) en una carpeta `datos/` junto al notebook.
+2. Abre el notebook y ejecútalo de arriba abajo. Por defecto crea una base SQLite a partir de los CSV; para usar MySQL, cambia `FUENTE = 'mysql'` (la contraseña se pide al ejecutar).
+3. La ficha financiera se guarda en `output/ficha_financiera_empresas.xlsx`.
 
 ## Autor
 

@@ -1,0 +1,14 @@
+# Datos de Kaggle y bases locales (no se suben)
+datos/
+*.csv
+*.db
+
+# Resultados generados por el notebook
+output/
+
+# Credenciales
+.env
+
+# Jupyter y Python
+.ipynb_checkpoints/
+__pycache__/
