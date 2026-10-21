@@ -79,7 +79,8 @@ CREATE TABLE income_statement (
     discontinuedOperations DOUBLE,
     UNIQUE KEY uq_income_stock_date (stock, endDate),
     INDEX idx_income_stock (stock),
-    INDEX idx_income_date (endDate)
+    INDEX idx_income_date (endDate),
+    INDEX idx_income_date_revenue (endDate, totalRevenue)   -- acelera la detección de cierres duplicados
 );
 
 -- ----------------------------------------------------------------------------
@@ -118,29 +119,123 @@ CREATE TABLE cash_flow (
 -- ============================================================================
 -- CARGA DE DATOS
 -- ============================================================================
--- Opción recomendada en MySQL Workbench (interfaz gráfica, sin permisos especiales):
---   1. Click derecho sobre cada tabla en el panel "Schemas" -> "Table Data Import Wizard"
---   2. Selecciona el CSV correspondiente:
---        balance_sheet   <- balanceSheetHistory_annually.csv
---        income_statement <- incomeStatementHistory_annually.csv
---        cash_flow        <- cashflowStatement_annually.csv
---   3. En el wizard, mapea las columnas (deberían coincidir automáticamente por nombre)
+-- IMPORTANTE: los CSV tienen muchas celdas vacías (por ejemplo, el CapEx falta
+-- en 2.245 cierres). Un vacío significa "la empresa no lo informó", no "cero".
 --
--- Alternativa por comando (requiere permisos de FILE y secure_file_priv configurado),
--- ejecutar sustituyendo la ruta por la ubicación real del CSV en tu máquina:
+-- El "Table Data Import Wizard" de MySQL Workbench convierte esos vacíos en 0,
+-- y entonces ratios como el flujo de caja libre salen con valores falsos. Por
+-- eso se carga con LOAD DATA y NULLIF(@columna, ''): cada vacío se guarda
+-- como NULL.
 --
--- LOAD DATA LOCAL INFILE '/ruta/a/balanceSheetHistory_annually.csv'
---     INTO TABLE balance_sheet
---     FIELDS TERMINATED BY ',' ENCLOSED BY '"'
---     LINES TERMINATED BY '\n'
---     IGNORE 1 ROWS
---     (stock, endDate, accountsPayable, inventory, longTermDebt, netReceivables,
---      netTangibleAssets, longTermInvestments, totalCurrentAssets, propertyPlantEquipment,
---      otherStockholderEquity, deferredLongTermAssetCharges, totalCurrentLiabilities, cash,
---      otherAssets, treasuryStock, goodWill, otherLiab, retainedEarnings, otherCurrentAssets,
---      commonStock, totalAssets, otherCurrentLiab, deferredLongTermLiab, totalStockholderEquity,
---      totalLiab, capitalSurplus, intangibleAssets, shortTermInvestments, shortLongTermDebt,
---      minorityInterest);
+-- Antes de ejecutarlo:
+--   1. Sustituye '/ruta/a/' por la carpeta donde tengas los 3 CSV de Kaggle.
+--   2. Activa la carga local: en Workbench, edita la conexión -> Advanced ->
+--      Others: OPT_LOCAL_INFILE=1, y ejecuta SET GLOBAL local_infile = 1;
+--   3. Si tus CSV vienen de Windows con saltos de línea \r\n, cambia
+--      LINES TERMINATED BY '\n' por '\r\n'.
+-- ============================================================================
+
+LOAD DATA LOCAL INFILE '/ruta/a/balanceSheetHistory_annually.csv'
+INTO TABLE balance_sheet
+FIELDS TERMINATED BY ','
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@stock, @endDate, @accountsPayable, @inventory, @longTermDebt, @netReceivables, @netTangibleAssets, @longTermInvestments, @totalCurrentAssets, @propertyPlantEquipment, @otherStockholderEquity, @deferredLongTermAssetCharges, @totalCurrentLiabilities, @cash, @otherAssets, @treasuryStock, @goodWill, @otherLiab, @retainedEarnings, @otherCurrentAssets, @commonStock, @totalAssets, @otherCurrentLiab, @deferredLongTermLiab, @totalStockholderEquity, @totalLiab, @capitalSurplus, @intangibleAssets, @shortTermInvestments, @shortLongTermDebt, @minorityInterest)
+SET
+    stock = NULLIF(@stock, ''),
+    endDate = NULLIF(@endDate, ''),
+    accountsPayable = NULLIF(@accountsPayable, ''),
+    inventory = NULLIF(@inventory, ''),
+    longTermDebt = NULLIF(@longTermDebt, ''),
+    netReceivables = NULLIF(@netReceivables, ''),
+    netTangibleAssets = NULLIF(@netTangibleAssets, ''),
+    longTermInvestments = NULLIF(@longTermInvestments, ''),
+    totalCurrentAssets = NULLIF(@totalCurrentAssets, ''),
+    propertyPlantEquipment = NULLIF(@propertyPlantEquipment, ''),
+    otherStockholderEquity = NULLIF(@otherStockholderEquity, ''),
+    deferredLongTermAssetCharges = NULLIF(@deferredLongTermAssetCharges, ''),
+    totalCurrentLiabilities = NULLIF(@totalCurrentLiabilities, ''),
+    cash = NULLIF(@cash, ''),
+    otherAssets = NULLIF(@otherAssets, ''),
+    treasuryStock = NULLIF(@treasuryStock, ''),
+    goodWill = NULLIF(@goodWill, ''),
+    otherLiab = NULLIF(@otherLiab, ''),
+    retainedEarnings = NULLIF(@retainedEarnings, ''),
+    otherCurrentAssets = NULLIF(@otherCurrentAssets, ''),
+    commonStock = NULLIF(@commonStock, ''),
+    totalAssets = NULLIF(@totalAssets, ''),
+    otherCurrentLiab = NULLIF(@otherCurrentLiab, ''),
+    deferredLongTermLiab = NULLIF(@deferredLongTermLiab, ''),
+    totalStockholderEquity = NULLIF(@totalStockholderEquity, ''),
+    totalLiab = NULLIF(@totalLiab, ''),
+    capitalSurplus = NULLIF(@capitalSurplus, ''),
+    intangibleAssets = NULLIF(@intangibleAssets, ''),
+    shortTermInvestments = NULLIF(@shortTermInvestments, ''),
+    shortLongTermDebt = NULLIF(@shortLongTermDebt, ''),
+    minorityInterest = NULLIF(@minorityInterest, '');
+
+LOAD DATA LOCAL INFILE '/ruta/a/incomeStatementHistory_annually.csv'
+INTO TABLE income_statement
+FIELDS TERMINATED BY ','
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@stock, @endDate, @netIncomeApplicableToCommonShares, @netIncomeFromContinuingOps, @totalOtherIncomeExpenseNet, @costOfRevenue, @totalOperatingExpenses, @totalRevenue, @incomeTaxExpense, @interestExpense, @operatingIncome, @ebit, @grossProfit, @sellingGeneralAdministrative, @netIncome, @incomeBeforeTax, @researchDevelopment, @otherOperatingExpenses, @minorityInterest, @discontinuedOperations)
+SET
+    stock = NULLIF(@stock, ''),
+    endDate = NULLIF(@endDate, ''),
+    netIncomeApplicableToCommonShares = NULLIF(@netIncomeApplicableToCommonShares, ''),
+    netIncomeFromContinuingOps = NULLIF(@netIncomeFromContinuingOps, ''),
+    totalOtherIncomeExpenseNet = NULLIF(@totalOtherIncomeExpenseNet, ''),
+    costOfRevenue = NULLIF(@costOfRevenue, ''),
+    totalOperatingExpenses = NULLIF(@totalOperatingExpenses, ''),
+    totalRevenue = NULLIF(@totalRevenue, ''),
+    incomeTaxExpense = NULLIF(@incomeTaxExpense, ''),
+    interestExpense = NULLIF(@interestExpense, ''),
+    operatingIncome = NULLIF(@operatingIncome, ''),
+    ebit = NULLIF(@ebit, ''),
+    grossProfit = NULLIF(@grossProfit, ''),
+    sellingGeneralAdministrative = NULLIF(@sellingGeneralAdministrative, ''),
+    netIncome = NULLIF(@netIncome, ''),
+    incomeBeforeTax = NULLIF(@incomeBeforeTax, ''),
+    researchDevelopment = NULLIF(@researchDevelopment, ''),
+    otherOperatingExpenses = NULLIF(@otherOperatingExpenses, ''),
+    minorityInterest = NULLIF(@minorityInterest, ''),
+    discontinuedOperations = NULLIF(@discontinuedOperations, '');
+
+LOAD DATA LOCAL INFILE '/ruta/a/cashflowStatement_annually.csv'
+INTO TABLE cash_flow
+FIELDS TERMINATED BY ','
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@stock, @endDate, @capitalExpenditures, @changeToNetincome, @otherCashflowsFromFinancingActivities, @changeToAccountReceivables, @changeToInventory, @dividendsPaid, @otherCashflowsFromInvestingActivities, @depreciation, @totalCashFromOperatingActivities, @effectOfExchangeRate, @repurchaseOfStock, @changeInCash, @netIncome, @changeToOperatingActivities, @totalCashFromFinancingActivities, @netBorrowings, @totalCashflowsFromInvestingActivities, @changeToLiabilities, @issuanceOfStock, @investments)
+SET
+    stock = NULLIF(@stock, ''),
+    endDate = NULLIF(@endDate, ''),
+    capitalExpenditures = NULLIF(@capitalExpenditures, ''),
+    changeToNetincome = NULLIF(@changeToNetincome, ''),
+    otherCashflowsFromFinancingActivities = NULLIF(@otherCashflowsFromFinancingActivities, ''),
+    changeToAccountReceivables = NULLIF(@changeToAccountReceivables, ''),
+    changeToInventory = NULLIF(@changeToInventory, ''),
+    dividendsPaid = NULLIF(@dividendsPaid, ''),
+    otherCashflowsFromInvestingActivities = NULLIF(@otherCashflowsFromInvestingActivities, ''),
+    depreciation = NULLIF(@depreciation, ''),
+    totalCashFromOperatingActivities = NULLIF(@totalCashFromOperatingActivities, ''),
+    effectOfExchangeRate = NULLIF(@effectOfExchangeRate, ''),
+    repurchaseOfStock = NULLIF(@repurchaseOfStock, ''),
+    changeInCash = NULLIF(@changeInCash, ''),
+    netIncome = NULLIF(@netIncome, ''),
+    changeToOperatingActivities = NULLIF(@changeToOperatingActivities, ''),
+    totalCashFromFinancingActivities = NULLIF(@totalCashFromFinancingActivities, ''),
+    netBorrowings = NULLIF(@netBorrowings, ''),
+    totalCashflowsFromInvestingActivities = NULLIF(@totalCashflowsFromInvestingActivities, ''),
+    changeToLiabilities = NULLIF(@changeToLiabilities, ''),
+    issuanceOfStock = NULLIF(@issuanceOfStock, ''),
+    investments = NULLIF(@investments, '');
+
+-- Comprobación: el CapEx debe tener vacíos (NULL) y ningún cero
+SELECT SUM(capitalExpenditures IS NULL) AS capex_vacio,
+       SUM(capitalExpenditures = 0)     AS capex_cero
+FROM cash_flow;
 
 -- ============================================================================
 -- VERIFICACIÓN RÁPIDA POST-CARGA

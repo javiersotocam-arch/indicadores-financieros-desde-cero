@@ -1,10 +1,10 @@
 -- ============================================================================
 -- flags_valores_extremos.sql
--- Anade el tratamiento de valores extremos (equivalente a add_extreme_flags()
--- de indicators.py) directamente en SQL, sobre la vista v_indicadores_financieros.
+-- Tratamiento de valores extremos directamente en SQL, sobre la vista
+-- v_indicadores_financieros (equivalente a marcar_extremos() del notebook).
 --
 -- Requiere haber ejecutado antes:
---   1) schema_mysql.sql + carga de datos
+--   1) schema_mysql.sql (tablas + carga de datos)
 --   2) rename_columns_es.sql
 --   3) queries_analisis.sql (crea v_indicadores_financieros)
 -- ============================================================================
@@ -19,6 +19,11 @@ USE financial_data;
 -- ROW_NUMBER() y se toma la fila que cae en la posicion 1% / 99% del total.
 -- Se guarda en una tabla de una sola fila para no recalcularlo en cada
 -- consulta (los valores no cambian salvo que se recarguen los datos).
+--
+-- Se toma el valor de la fila más cercana a la posición del percentil, sin
+-- interpolar entre dos filas como hace .quantile() en pandas. Por eso puede
+-- haber una diferencia mínima: 347 cierres con ROE extremo aquí frente a 348
+-- en Python, sobre 17.511.
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS percentiles_ratios;
 CREATE TABLE percentiles_ratios AS
@@ -128,7 +133,7 @@ SELECT * FROM percentiles_ratios;
 -- ----------------------------------------------------------------------------
 -- 2. Vista final: indicadores + flags de valores extremos
 --
--- Igual que en indicators.py: el valor del ratio NUNCA se altera, solo se
+-- Igual que en el notebook de Python: el valor del ratio NUNCA se altera, solo se
 -- marca con un flag booleano si cae fuera de [percentil 1%, percentil 99%].
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE VIEW v_indicadores_con_flags AS

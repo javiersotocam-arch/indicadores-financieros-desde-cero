@@ -39,7 +39,13 @@ La parte de Python se revisó a fondo y se reunió en un único notebook (antes 
 - **Medias engañosas**: el ROE medio de 2018 (46.810 %) y un margen neto medio de −190 % en el gráfico de evolución; ahora se usa la mediana.
 - **Seguridad y portabilidad**: la contraseña de MySQL ya no está en el código y las rutas son relativas.
 
-Los scripts `.sql` se mantienen en su versión original: las dos primeras limitaciones (duplicados y vacíos importados como 0) también les afectan, y el notebook explica cómo detectarlas.
+Los scripts SQL también se corrigieron y se ejecutaron enteros contra los datos reales:
+
+- **No encajaban entre sí**: la vista usaba nombres en inglés y el script de valores extremos esperaba nombres en español y un `rename_columns_es.sql` que no estaba en el repositorio. Ahora el script está incluido y toda la cadena usa los mismos nombres que el notebook.
+- **Carga con vacíos como NULL**: `schema_mysql.sql` carga los CSV con `LOAD DATA` y `NULLIF(@columna, '')`, en vez del asistente de importación de Workbench, que convertía los vacíos en 0.
+- **Duplicados y ranking por año**: la vista incluye la columna `cierre_duplicado`, y el top 10 por ingresos filtra por año de cierre y excluye duplicados con `NOT EXISTS`.
+- **Márgenes con todos los decimales**: beneficio e ingresos son enteros y MySQL redondeaba su división a 4 decimales.
+- Los resultados coinciden con los de Python: 17.511 cierres, 1.410 con patrimonio negativo y 101 duplicados. La única diferencia es mínima: 347 cierres con ROE extremo frente a 348, porque el percentil en SQL toma la fila más cercana y pandas interpola.
 
 ## Herramientas
 
@@ -48,8 +54,9 @@ Los scripts `.sql` se mantienen en su versión original: las dos primeras limita
 
 ## Estructura del repositorio
 
-- `schema_mysql.sql`: creación de la base de datos y las tablas
-- `queries_analisis.sql`: vista `v_indicadores_financieros` y exploración en SQL
+- `schema_mysql.sql`: creación de la base de datos y las tablas, y carga de los CSV
+- `rename_columns_es.sql`: renombra al español las columnas que usa el proyecto
+- `queries_analisis.sql`: exploración y calidad del dato en SQL, y vista `v_indicadores_financieros`
 - `flags_valores_extremos.sql`: percentiles manuales y flags de valores extremos
 - `indicadores_financieros_python_explicado.ipynb`: el pipeline completo en Python, explicado paso a paso
 - `indicadores_financieros_python_explicado.pdf`: el mismo notebook en PDF
@@ -58,10 +65,12 @@ Los scripts `.sql` se mantienen en su versión original: las dos primeras limita
 
 **SQL (MySQL Workbench)**
 
-1. Crea la base de datos ejecutando `schema_mysql.sql`.
-2. Carga los tres CSV de estados financieros en sus tablas correspondientes (instrucciones dentro del propio script).
-3. Ejecuta `queries_analisis.sql` para crear la vista `v_indicadores_financieros` y explorar los datos.
-4. Ejecuta `flags_valores_extremos.sql` para añadir los flags de valores extremos.
+Requiere MySQL 8.0 o superior. Ejecuta los scripts en este orden:
+
+1. `schema_mysql.sql`: crea la base de datos y carga los 3 CSV. Antes, cambia `/ruta/a/` por la carpeta donde tengas los CSV y activa la carga local (instrucciones dentro del script).
+2. `rename_columns_es.sql`: pasa al español los nombres de las columnas (solo una vez).
+3. `queries_analisis.sql`: exploración y creación de la vista `v_indicadores_financieros`.
+4. `flags_valores_extremos.sql`: percentiles y vista `v_indicadores_con_flags`.
 
 **Python**
 
