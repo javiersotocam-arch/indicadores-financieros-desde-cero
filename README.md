@@ -10,7 +10,7 @@ Comparar la salud financiera de distintas empresas requiere algo más que mirar 
 
 - **Datos**: 4.422 empresas cotizadas y 17.511 cierres anuales con los 3 estados contables disponibles ([Financial Data of 4400+ Public Companies](https://www.kaggle.com/datasets/qks1lver/financial-data-of-4400-public-companies), Kaggle).
 - **Patrimonio neto negativo**: el 8,1 % de los cierres; en ellos el ROE no es interpretable y se marca con un flag.
-- **Valores extremos**: la media de ratios como el ROE no sirve sin tratarlos (el ROE medio de 2018 sale un 46.810 %); la mediana o la versión winsorizada sí.
+- **Valores extremos**: la media de ratios como el ROE no sirve sin tratarlos (el ROE medio de 2018 sale un 46.810 %); la mediana sí. Winsorizar ayuda, pero no basta cuando hay muchos extremos (el margen neto medio winsorizado sale −190 %).
 - **Calidad del dato**: 101 cierres duplicados en 27 tickers (por ejemplo GOOG y GOOGL, la misma empresa) y celdas vacías que, al importarse a MySQL, se convertían en ceros.
 
 ## Qué hace este proyecto
@@ -23,7 +23,7 @@ Comparar la salud financiera de distintas empresas requiere algo más que mirar 
   - **Calidad del beneficio**: flujo de caja sobre beneficio neto, flujo de caja libre
 - **Tratamiento de valores extremos sin alterar los datos**: en vez de recortar o eliminar los valores atípicos, se calcula el percentil 1 % y 99 % de cada ratio **a mano** (MySQL no tiene función `PERCENTILE_CONT` nativa, así que se resuelve con `ROW_NUMBER()` sobre los valores ordenados) y se marca cada fila con un flag booleano si cae fuera de ese rango, dejando la decisión de excluirlos o no en manos de quien analice los datos después.
 - **Análisis exploratorio en SQL**: volumetría por tabla, empresas con histórico incompleto, crecimiento interanual de ingresos con `LAG() OVER (PARTITION BY ...)`, evolución de la rentabilidad por año y prevalencia de patrimonio neto negativo.
-- **Pipeline en Python**: los mismos indicadores con pandas, una versión winsorizada para agregados, la ficha financiera por empresa y su exportación a Excel con gráficos nativos.
+- **Pipeline en Python**: los mismos indicadores con pandas, la mediana para la evolución anual (y una versión winsorizada para el gráfico de dispersión), la ficha financiera por empresa y su exportación a Excel con gráficos nativos.
 
 ## Un detalle técnico destacado
 
